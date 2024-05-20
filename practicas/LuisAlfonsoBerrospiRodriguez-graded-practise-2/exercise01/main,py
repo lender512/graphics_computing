@@ -1,0 +1,35 @@
+import numpy as np
+import os
+import pandas as pd
+
+FOLDER = "exercise01"
+
+def lines_intersect(a, b, c, d):
+    segmentA = np.array([a, b])
+    segmentB = np.array([c, d])
+    
+    signB_0 = np.sign(np.cross(segmentA[1] - segmentA[0], segmentB[0] - segmentA[0]))
+    signB_1 = np.sign(np.cross(segmentA[1] - segmentA[0], segmentB[1] - segmentA[0]))
+    if signB_0 == signB_1:
+        return False
+    signA_0 = np.sign(np.cross(segmentB[1] - segmentB[0], segmentA[0] - segmentB[0]))
+    signA_1 = np.sign(np.cross(segmentB[1] - segmentB[0], segmentA[1] - segmentB[0]))
+    if signA_0 == signA_1:
+        return False
+    
+    return True
+
+test = pd.read_csv(os.path.join(FOLDER, "test.csv"))
+success = 0
+total = 0
+for i, row in test.iterrows():
+    a = np.array([row["a_x"], row["a_y"]])
+    b = np.array([row["b_x"], row["b_y"]])
+    c = np.array([row["c_x"], row["c_y"]])
+    d = np.array([row["d_x"], row["d_y"]])
+    y = row["intersects"]
+    Y = lines_intersect(a, b, c, d)
+    success += y == Y
+    total += 1
+print(f"Success rate: {(success/total):.2%}")
+    
