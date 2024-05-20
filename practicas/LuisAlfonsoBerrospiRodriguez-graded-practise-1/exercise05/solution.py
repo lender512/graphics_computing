@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import math
-
+import sys
 
 def apply_border(img, padding, value=0):
     if len(img.shape) == 2:
@@ -73,20 +73,13 @@ def create_barlett(grade):
     matrix = np.outer(vector, vector)
     return matrix / np.sum(matrix)
 
-def binomial_coefficients(n):
-    coefficients = [1]
-    for k in range(1, n + 1):
-        next_coefficients = [1]
-        for i in range(1, k):
-            next_coefficients.append(coefficients[i - 1] + coefficients[i])
-        next_coefficients.append(1)
-        coefficients = next_coefficients
-    return np.array(coefficients)
 
 def create_gaussian(grade):
-    coefficients = binomial_coefficients(grade)
-    mid = len(coefficients) // 2
-    return coefficients / sum(coefficients)
+    raw = np.zeros((grade, grade))
+    for i in range(grade):
+        for j in range(grade):
+            raw[i, j] = np.exp(-((i - grade // 2) * 2 + (j - grade // 2) * 2) / (2 * (grade // 2) ** 2))
+    return raw / np.sum(raw)
     
     
 
@@ -130,7 +123,7 @@ def high_pass_filter(img, function):
     return img
 
 
-img_path = 'lenna.png'
+img_path = sys.argv[1] if len(sys.argv) > 1 else 'lenna.png'
 
 columns = ['original', '3x3', '5x5', '7x7', '9x9', '11x11',
            '13x13', '15x15', '17x17', '19x19', '21x21', '23x23', '25x25']

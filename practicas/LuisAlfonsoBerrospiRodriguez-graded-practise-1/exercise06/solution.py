@@ -62,7 +62,7 @@ class ball:
                     self.color = get_random_color()
                     
     
-n_balls = 200
+n_balls = 100
 min_r = 5
 max_r = 10
 min_speed = -2

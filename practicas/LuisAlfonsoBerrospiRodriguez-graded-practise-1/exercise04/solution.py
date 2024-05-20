@@ -1,10 +1,10 @@
 import numpy as np
 import cv2
 import math
-
+import sys 
 # Cambiar el brillo de una imagen
 
-img_path = 'lenna.png'
+img_path = img_path = sys.argv[1] if len(sys.argv) > 1 else 'lenna.png'
 final_img_path = 'exercise04/output/lenna-colorscale.png'
 
 def target(img, target_img):
