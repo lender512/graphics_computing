@@ -8,10 +8,12 @@ def lines_intersect(a, b, c, d):
     segmentA = np.array([a, b])
     segmentB = np.array([c, d])
     
+    # Check if the segments are parallel
     signB_0 = np.sign(np.cross(segmentA[1] - segmentA[0], segmentB[0] - segmentA[0]))
     signB_1 = np.sign(np.cross(segmentA[1] - segmentA[0], segmentB[1] - segmentA[0]))
     if signB_0 == signB_1:
         return False
+    # Check if the segments intersect
     signA_0 = np.sign(np.cross(segmentB[1] - segmentB[0], segmentA[0] - segmentB[0]))
     signA_1 = np.sign(np.cross(segmentB[1] - segmentB[0], segmentA[1] - segmentB[0]))
     if signA_0 == signA_1:
