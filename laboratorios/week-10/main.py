@@ -70,57 +70,39 @@ def rotate_point(points_3d, pivot_3d, angle_3d):
     pivot_3d = np.array(pivot_3d)
     angle_3d = np.array(angle_3d)
     
-    #rotate every point in points_3d around pivot_3d by angle_3d convert to radian
-    angle_3d = angle_3d * np.pi / 180
-    #use the rotation matrix
+    # Translate the points so that the pivot is at the origin
     points_3d = points_3d - pivot_3d
-    x = points_3d[:,0]
-    y = points_3d[:,1]
-    z = points_3d[:,2]
+    
+    # Convert the angles to radians
+    angle_3d = np.radians(angle_3d)
     angle_x = angle_3d[0]
     angle_y = angle_3d[1]
     angle_z = angle_3d[2]
-    #rotate around x
-    x_rotated = x
-    y_rotated = y*np.cos(angle_x) - z*np.sin(angle_x)
-    z_rotated = y*np.sin(angle_x) + z*np.cos(angle_x)
-    #rotate around y
-    x = x_rotated
-    y = y_rotated
-    z = z_rotated
-    x_rotated = x*np.cos(angle_y) + z*np.sin(angle_y)
-    y_rotated = y
-    z_rotated = -x*np.sin(angle_y) + z*np.cos(angle_y)
-    #rotate around z
-    x = x_rotated
-    y = y_rotated
-    z = z_rotated
-    x_rotated = x*np.cos(angle_z) - y*np.sin(angle_z)
-    y_rotated = x*np.sin(angle_z) + y*np.cos(angle_z)
-    z_rotated = z
-    #add the pivot back
-    points_3d = np.array([x_rotated, y_rotated, z_rotated]).T + pivot_3d
-    return points_3d.tolist()
+    
+    rotation_x = np.array([[1, 0, 0],
+                           [0, np.cos(angle_x), -np.sin(angle_x)],
+                           [0, np.sin(angle_x), np.cos(angle_x)]])
+    
+    rotation_y = np.array([[np.cos(angle_y), 0, np.sin(angle_y)],
+                           [0, 1, 0],
+                           [-np.sin(angle_y), 0, np.cos(angle_y)]])
+    
+    rotation_z = np.array([[np.cos(angle_z), -np.sin(angle_z), 0],
+                           [np.sin(angle_z), np.cos(angle_z), 0],
+                           [0, 0, 1]])
+    
+    # Combine the rotations
+    rotation_matrix = np.dot(np.dot(rotation_x, rotation_y), rotation_z)
+    
+    # Rotate the points
+    rotated_points = np.dot(points_3d, rotation_matrix.T)
+    
+    # Translate the points back
+    rotated_points = rotated_points + pivot_3d
+    
+    return rotated_points.tolist()
 
-def mirror_point(points_3d, pivot_3d, axis):
-    points_3d = np.array(points_3d)
-    pivot_3d = np.array(pivot_3d)
-    axis = np.array(axis)
-    #mirror every point in points_3d around pivot_3d by axis
-    points_3d = points_3d - pivot_3d
-    x = points_3d[:,0]
-    y = points_3d[:,1]
-    z = points_3d[:,2]
-    a = axis[0]
-    b = axis[1]
-    c = axis[2]
-    #mirror around the plane a*x + b*y + c*z = 0
-    x_mirrored = x - 2*(a*x + b*y + c*z)/(a**2 + b**2 + c**2)*a
-    y_mirrored = y - 2*(a*x + b*y + c*z)/(a**2 + b**2 + c**2)*b
-    z_mirrored = z - 2*(a*x + b*y + c*z)/(a**2 + b**2 + c**2)*c
-    #add the pivot back
-    points_3d = np.array([x_mirrored, y_mirrored, z_mirrored]).T + pivot_3d
-    return points_3d.tolist()
+
     
 def setup_case(case, midpoint ,rotation, color = 'k'):
     for i in range(len(case)):
@@ -138,6 +120,7 @@ def check_if_function_changes_sign_in_square(f, xmin, ymin, xmax, ymax):
         
 
 def check_if_function_changes_sign_in_box(f, xmin, ymin, zmin, xmax, ymax, zmax):
+
     N = 500
     points = np.random.rand(N, 3)
     points = points * np.array([xmax - xmin, ymax - ymin, zmax - zmin]) + np.array([xmin, ymin, zmin])
@@ -178,10 +161,35 @@ def to_OFF(faces, filename):
         for face in faces:
             f.write(f'{len(face)} {" ".join([str(get_index(vertex, vertices)) for vertex in face])}\n')
             
-            
+def rotate_z_curve(cube, angle_x, angle_y, angle_z):
 
-def marching_cubes(f, output_filename, xmin, ymin, zmin, xmax, ymax, zmax, precision):
-    def marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, colors):
+    
+    # Define the original coordinates of the Z-order curve
+    coords = np.array([
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [1, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [0, 1, 1],
+        [1, 1, 1]
+    ])
+    
+    rotated_coords = rotate_point(coords, (0.5, 0.5, 0.5), (angle_x, angle_y, angle_z))
+    
+    # Move the boolean values to the new coordinates
+    rotated_cube = np.zeros(8, dtype=bool)
+    for i in range(8):
+        x = int(rotated_coords[i][0] + 0.5)
+        y = int(rotated_coords[i][1] + 0.5)
+        z = int(rotated_coords[i][2] + 0.5)
+        rotated_cube[i] = cube[x + 2*y + 4*z]
+        
+    
+    return np.array(rotated_cube)
+
+def marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, colors):
         xmid = (xmin + xmax) / 2
         ymid = (ymin + ymax) / 2
         zmid = (zmin + zmax) / 2
@@ -211,105 +219,77 @@ def marching_cubes(f, output_filename, xmin, ymin, zmin, xmax, ymax, zmax, preci
         # f010----f110
         
         
-        
-        cube = np.array((f000 > 0, f100 > 0, f010 > 0, f110 > 0, f001 > 0, f101 > 0, f011 > 0, f111 > 0))
+    
+        #create cube in z space filling curve
+        cube = np.array([f000 > 0, f100 > 0, f010 > 0, f110 > 0, f001 > 0, f101 > 0, f011 > 0, f111 > 0])
         cube_str = ''.join([str(int(i)) for i in cube])
         cube_str = cube_str[:4] + '_' + cube_str[4:]
         cube_n_str = ''.join([str(int(not i)) for i in cube])
         cube_n_str = cube_n_str[:4] + '_' + cube_n_str[4:]
         #check if is less than precision
         
-        if np.all(cube):
+        if np.all(cube) or np.all(~cube):
             if not check_if_function_changes_sign_in_box(f, xmin, ymin, zmin, xmax, ymax, zmax):
                 return
         
         if ((xmax - xmin )< precision) and (ymax - ymin < precision) and (zmax - zmin < precision):
+            # i just solved the case 1, 2, 4, 5, 8 because they are the more common cases and the most used
+            # for a sphere
             case_1 = [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymid, zmin)]]
+            case_1_base = np.array([True, False, False, False, False, False, False, False])
             case_2 = [[(xmin, ymin, zmid), (xmax, ymin, zmid), (xmin, ymid, zmin)],
                       [(xmax, ymid, zmin), (xmax, ymin, zmid), (xmin, ymid, zmin)]]
-            case_3 = [case_1,
-                      rotate_point(case_1, (xmid, ymid, zmid), (0, 0, 180))]
+            case_2_base = np.array([True, True, False, False, False, False, False, False])
+            # case_3 = [case_1,
+            #           rotate_point(case_1, (xmid, ymid, zmid), (0, 0, 180))]
             case_4 = [[(xmid, ymin, zmin), (xmin, ymin, zmid), (xmax, ymid, zmin)],
                       [(xmin, ymin, zmid), (xmin, ymid, zmax), (xmax, ymid, zmin)],
                       [(xmin, ymid, zmax), (xmax, ymid, zmin), (xmax, ymid, zmax)]]
+            case_4_base = np.array([False, True, False, False, True, True, False, False])
             case_5 = [[(xmin, ymid, zmin), (xmax, ymid, zmax), (xmax, ymid, zmin)],
                       [(xmin, ymid, zmin), (xmax, ymid, zmax), (xmin, ymid, zmax)]]
+            case_5_base = np.array([True, True, False, False, True, True, False, False])
+            case_8 = [[(xmin, ymid, zmin), (xmin, ymax, zmid), (xmid, ymax, zmax)],
+                      [(xmin, ymid, zmin), (xmid, ymin, zmin), (xmid, ymax, zmax)],
+                        [(xmid, ymin, zmin), (xmid, ymax, zmax), (xmax, ymid, zmax)],
+                        [(xmax, ymid, zmax), (xmid, ymin, zmin), (xmax, ymin, zmid)]]
+            case_8_base = np.array([True, False, False, False, True, True, True, False])
+            
             local_faces = []            
-            if '0000_0000' in [cube_str, cube_n_str]:
-                pass
-            elif '0000_0001' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (180, 90, 0))
-            elif '0000_0010' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (180, 0, 0))
-            elif '0000_0011' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (-90, 0, 180))
-            elif '0000_0100' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (0, 180, 0))
-            elif '0000_0101' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (-90, 0, 90))
-            elif '0000_0110' in [cube_str, cube_n_str]:
-                pass # case 3
-            elif '0000_0111' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (-90, 0, 0))
-            elif '0000_1000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (-90, 0, 0))
-            elif '0000_1001' in [cube_str, cube_n_str]:
-                pass # case 3
-            elif '0000_1010' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (-90, 0, -90))
-            elif '0000_1011' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (-90, 0, 90))
-            elif '0000_1100' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (0, 180, 0))
-            elif '0000_1101' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (-90, 0, -90)) #bug?
-            elif '0000_1110' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (-90, 0, 90)) #bug?
-            elif '0000_1111' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_5, (xmid, ymid, zmid), (-90, 0, 0))
-            elif '0001_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (0, 0, 180))
-            #ignore weird cases
-            
-            elif '0100_1100' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (0, 0, 0))
-            elif '1100_1100' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_5, (xmid, ymid, zmid), (0, 0, 0))
-            elif '0101_0101' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_5, (xmid, ymid, zmid), (0, 0, 90))
-            
-            #################
-            elif '0010_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (90, 0, 0))
-            elif '0011_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (0, 0, 180))
-                
-            elif '0100_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (0, 0, 90))
-            elif '0101_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (0, 0, 90))
-            elif '0110_0000' in [cube_str, cube_n_str]:
-                pass #case 3
-            elif '0111_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (90, 0, -90))
-            elif '1000_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_1, (xmid, ymid, zmid), (0, 0, 0))
-            elif '1001_0000' in [cube_str, cube_n_str]:
-                pass #case 3
-            elif '1010_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (0, 0, -90))
-            elif '1011_0000' in [cube_str, cube_n_str]:
-                local_faces =  setup_case(case_4, (xmid, ymid, zmid), (90, 0, 180))
-            elif '1100_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_2, (xmid, ymid, zmid), (0, 0, 0))
-            elif '1101_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (90, 0, 0))
-            elif '1110_0000' in [cube_str, cube_n_str]:
-                local_faces = setup_case(case_4, (xmid, ymid, zmid), (-90, 180, 0))
-                
-            
-                
-            
+            # case 1 and its rotations
+            found = False
+            for i in range(4):
+                for j in range(4):
+                    for k in range(4):
+                        x = i * 90
+                        y = j * 90
+                        z = k * 90
+                        rotated_cube = rotate_z_curve(cube, x, y, z)
+                        # check if the rotated cube matches the case
+                        if (rotated_cube == case_1_base).all() or (rotated_cube == ~case_1_base).all():
+                            local_faces = setup_case(case_1, (xmid, ymid, zmid), (x, y, z))
+                            found = True
+                            break
+                        if (rotated_cube == case_2_base).all() or (rotated_cube == ~case_2_base).all():
+                            local_faces = setup_case(case_2, (xmid, ymid, zmid), (x, y, z))
+                            found = True
+                            break
+                        if (rotated_cube == case_4_base).all() or (rotated_cube == ~case_4_base).all():
+                            local_faces = setup_case(case_4, (xmid, ymid, zmid), (x, y, z))
+                            found = True
+                            break
+                        if (rotated_cube == case_5_base).all() or (rotated_cube == ~case_5_base).all():
+                            local_faces = setup_case(case_5, (xmid, ymid, zmid), (x, y, z))
+                            found = True
+                            break
+                        if (rotated_cube == case_8_base).all() or (rotated_cube == ~case_8_base).all():
+                            local_faces = setup_case(case_8, (xmid, ymid, zmid), (x, y, z))
+                            found = True
+                            break
+                    if found:
+                        break
+                if found:
+                    break
             
             if local_faces != []:
                 for face in local_faces[0]:
@@ -328,39 +308,20 @@ def marching_cubes(f, output_filename, xmin, ymin, zmin, xmax, ymax, zmax, preci
         marching_cubes_u(f, xmid, ymin, zmid, xmax, ymid, zmax, precision, faces, colors)
         marching_cubes_u(f, xmin, ymid, zmid, xmid, ymax, zmax, precision, faces, colors)
         marching_cubes_u(f, xmid, ymid, zmid, xmax, ymax, zmax, precision, faces, colors)
-        
+
+
+def marching_cubes(f, output_filename, xmin, ymin, zmin, xmax, ymax, zmax, precision):
+    
     faces = []
     colors = []
     marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, colors)
-    
-    #show as 3d in matplotlib and rotate
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # for face in faces:
-    #     n = len(face)
-    #     for i in range(n):
-    #         ax.plot([face[i][0], face[(i+1)%n][0]], [face[i][1], face[(i+1)%n][1]], [face[i][2], face[(i+1)%n][2]], f'{colors[i]}-', linewidth=0.3)
-    #         #fill polygon
-    # plt.axis('off')
-    # ax.set_aspect('equal')
-    
-    #show axis labels
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    
+
     to_OFF(faces, output_filename)
-    
-    
-    #rotate the plot
-    # for angle in range(0, 360):
-    #     ax.view_init(30, angle)
-    #     plt.draw()
-    #     plt.pause(.001)
-    
+
     
 def f_3d(x, y, z):
     return float(x)**2 + float(y)**2 + float(z)**2 - 1000
+# 3d heart
 
 def f_2d(x, y):
     return float(x)**2 + float(y)**2 - 1000
@@ -368,7 +329,7 @@ def f_2d(x, y):
 if __name__ == '__main__':
 
     marching_squares(f_2d, "output.eps", -100, -100, 100, 100, 0.5)
-    marching_cubes(f_3d, "output.OFF", -100, -100, -100, 100, 100, 100, 5)    
+    marching_cubes(f_3d, "output.OFF", -100, -100, -100, 100, 100, 100, 4)
 
 # Drawing the implicit curve for f(x, y) = 0
 # marching_squares(f, "output.eps", -100, -100, 100, 100, 0.5)
