@@ -8,6 +8,7 @@ def parse_json(json_object):
     operation = json_object['op']
     if operation == 'union':
         
+        
 
 def eval_function(expr):
     def inner(x, y):
