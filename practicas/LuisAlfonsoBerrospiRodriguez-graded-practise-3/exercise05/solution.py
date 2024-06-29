@@ -1,76 +1,85 @@
 import math
+import cv2
 
-def read_ply(file_path):
+def read_ply(filename):
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+
+    header = []
     vertices = []
     faces = []
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        header_ended = False
-        vertex_count = 0
-        face_count = 0
-        reading_vertices = False
-        reading_faces = False
-        for line in lines:
-            if line.startswith("end_header"):
-                header_ended = True
-                reading_vertices = True
-                continue
-            if not header_ended:
-                if line.startswith("element vertex"):
-                    vertex_count = int(line.split()[-1])
-                if line.startswith("element face"):
-                    face_count = int(line.split()[-1])
-            else:
-                if reading_vertices:
-                    if vertex_count > 0:
-                        vertices.append(list(map(float, line.strip().split())))
-                        vertex_count -= 1
-                        if vertex_count == 0:
-                            reading_vertices = False
-                            reading_faces = True
-                elif reading_faces:
-                    if face_count > 0:
-                        faces.append(list(map(int, line.strip().split()[1:])))
-                        face_count -= 1
-    return vertices, faces
+    vertex_count = 0
+    face_count = 0
 
-def write_ply(file_path, vertices, faces):
-    with open(file_path, 'w') as file:
-        file.write("ply\n")
-        file.write("format ascii 1.0\n")
-        file.write(f"element vertex {len(vertices)}\n")
-        file.write("property float x\n")
-        file.write("property float y\n")
-        file.write("property float z\n")
-        file.write("property float u\n")
-        file.write("property float v\n")
-        file.write(f"element face {len(faces)}\n")
-        file.write("property list uchar int vertex_indices\n")
-        file.write("end_header\n")
-        for vertex in vertices:
-            file.write(f"{' '.join(map(str, vertex))}\n")
+    in_header = True
+
+    for line in lines:
+        if in_header:
+            header.append(line.strip())
+            if line.startswith('element vertex'):
+                vertex_count = int(line.split()[-1])
+            if line.startswith('element face'):
+                face_count = int(line.split()[-1])
+            if line.startswith('end_header'):
+                header.append('property float texture_u')
+                header.append('property float texture_v')
+                in_header = False
+        else:
+            if vertex_count > 0:
+                vertices.append([float(v) for v in line.strip().split()])
+                vertex_count -= 1
+            else:
+                faces.append([int(f) for f in line.strip().split()[1:]])
+
+    return header, vertices, faces
+
+def write_ply(filename, header, vertices, faces, texture_u, texture_v):
+    with open(filename, 'w') as file:
+        for line in header:
+            file.write(f"{line}\n")
+        file.write('end_header\n')
+        for i, vertex in enumerate(vertices):
+            file.write(f"{vertex[0]} {vertex[1]} {vertex[2]} {texture_u[i]} {texture_v[i]}\n")
         for face in faces:
-            file.write(f"3 {' '.join(map(str, face))}\n")
+            file.write(f"4 {' '.join(map(str, face))}\n")
 
 def sphere_with_texture(full_path_input_ply, full_path_texture, center, full_path_output_ply):
-    vertices, faces = read_ply(full_path_input_ply)
-    Cx, Cy, Cz = center
+    # Read the PLY file manually
+    header, vertices, faces, = read_ply(full_path_input_ply)
+    
+    cx, cy, cz = center
+    texture_u = []
+    texture_v = []
 
-    # Calculate texture coordinates
+    # Load the texture to get dimensions using cv2
+    texture_image = cv2.imread(full_path_texture)
+    texture_height, texture_width, _ = texture_image.shape
+
+    # Calculate texture coordinates for each vertex
     for vertex in vertices:
-        x, y, z = vertex[:3]
-        theta = math.atan2(y - Cy, x - Cx)
-        phi = math.acos((z - Cz) / math.sqrt((x - Cx)**2 + (y - Cy)**2 + (z - Cz)**2))
-        u = (theta + math.pi) / (2 * math.pi)
-        v = phi / math.pi
-        vertex.extend([u, v])
+        vx, vy, vz = vertex
 
-    write_ply(full_path_output_ply, vertices, faces)
+        # Calculate spherical coordinates
+        phi = math.atan2(vy - cy, vx - cx)
+        theta = math.acos((vz - cz) / math.sqrt((vx - cx)**2 + (vy - cy)**2 + (vz - cz)**2))
 
+        # Normalize to texture coordinates
+        u = (phi + math.pi) / (2 * math.pi)
+        v = theta / math.pi
+
+        # Scale texture coordinates by texture dimensions
+        u_scaled = u * texture_width
+        v_scaled = (1 - v) * texture_height  # v is flipped vertically
+
+        texture_u.append(u_scaled)
+        texture_v.append(v_scaled)
+
+    # Write the updated PLY file manually
+    write_ply(full_path_output_ply, header, vertices, faces, texture_u, texture_v)
 # Example usage
 sphere_with_texture(
-    full_path_input_ply='sphere_triangular.ply',
-    full_path_texture='texture2.png',
+    full_path_input_ply='sphere.ply',
+    full_path_texture='texture1.png',
     center=(2, 3, 5),
     full_path_output_ply='sphere-with-texture-1.ply'
 )
