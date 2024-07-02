@@ -126,7 +126,7 @@ if __name__ == "__main__":
         optical_axis_x=[0,0,0,0,0,0,0,0,0,0],
         optical_axis_y=[0,0,0,0,0,0,0,0,0,0],
         optical_axis_z=[-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0],
-        focal_distance=1000,
+        focal_distance=500,
         output_width_in_pixels=1920, output_height_in_pixels=1080,
         prefix_output_files="bunny_animation"
     )

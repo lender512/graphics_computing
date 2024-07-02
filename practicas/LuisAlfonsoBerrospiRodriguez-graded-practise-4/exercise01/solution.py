@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import time
 
+
 def read(path):
     with open(path, 'r') as file:
         # Read the first two lines to get the header and counts
@@ -89,9 +90,9 @@ def project_points(
 if __name__ == "__main__":
     project_points(
         "meshes-for-exercises-1-2-3/bunny_mc.off",
-        .0, 0.12, -.2,
+        .0, 0.12, -.1,
         0, 0, -1.0,
-        1000,
+        500,
         1920, 1080,
         "bunny.png"
     )
