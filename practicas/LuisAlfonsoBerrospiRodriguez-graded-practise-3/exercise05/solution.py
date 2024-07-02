@@ -1,84 +1,97 @@
+import math
 import numpy as np
 import cv2
 
-def read_ply(file_path):
+def read(path):
     vertices = []
     faces = []
-    with open(file_path, 'r') as file:
+    with open(path, 'r') as file:
         lines = file.readlines()
-        
-        header = True
+        header_ended = False
+        vertex_count = 0
+        face_count = 0
+        reading_vertices = False
+        reading_faces = False
         for line in lines:
-            if header:
-                if line.startswith('end_header'):
-                    header = False
+            if line.startswith("end_header"):
+                header_ended = True
+                reading_vertices = True
+                continue
+            if not header_ended:
+                if line.startswith("element vertex"):
+                    vertex_count = int(line.split()[-1])
+                if line.startswith("element face"):
+                    face_count = int(line.split()[-1])
             else:
-                parts = line.strip().split()
-                if len(parts) == 3:
-                    vertices.append(tuple(map(float, parts)))
-                elif len(parts) > 3:
-                    faces.append(tuple(map(int, parts[1:])))
-    return np.array(vertices), np.array(faces)
+                if reading_vertices:
+                    if vertex_count > 0:
+                        vertices.append(list(map(float, line.strip().split())))
+                        vertex_count -= 1
+                        if vertex_count == 0:
+                            reading_vertices = False
+                            reading_faces = True
+                elif reading_faces:
+                    if face_count > 0:
+                        faces.append(list(map(int, line.strip().split()[1:])))
+                        face_count -= 1
+    
+    return vertices, faces
 
-def write_ply(file_path, vertices, faces, texture_file):
-    with open(file_path, 'w') as file:
+def save(path, vertices, faces, texture_coords):
+    with open(path, 'w') as file:
         file.write("ply\n")
         file.write("format ascii 1.0\n")
         file.write(f"element vertex {len(vertices)}\n")
         file.write("property float x\n")
         file.write("property float y\n")
         file.write("property float z\n")
-        file.write("property float u\n")
-        file.write("property float v\n")
+        file.write("property float s\n")
+        file.write("property float t\n")
         file.write(f"element face {len(faces)}\n")
-        file.write("property list uchar int vertex_index\n")
+        file.write("property list uchar int vertex_indices\n")
         file.write("end_header\n")
+        for v, tc in zip(vertices, texture_coords):
+            file.write(f"{' '.join(map(str, v))} {tc[0]} {tc[1]}\n")
+        for f in faces:
+            file.write(f"{len(f)} {' '.join(map(str, f))}\n")
+
+def calculate_texture_coords(vertices, center, texture_size):
+    texture_coords = []
+    width, height = texture_size
+    aspect_ratio = width / height
+
+    for v in vertices:
+        v_rel = np.array(v) - np.array(center)
         
-        for vertex in vertices:
-            file.write(f"{vertex[0]} {vertex[1]} {vertex[2]} {vertex[3]} {vertex[4]}\n")
-        for face in faces:
-            file.write(f"{len(face)} " + " ".join(map(str, face)) + "\n")
+        theta = math.atan2(v_rel[1], v_rel[0])
+        phi = math.atan2(math.sqrt(v_rel[0]**2 + v_rel[1]**2), v_rel[2])
+        
+        s = (theta + math.pi) / (2 * math.pi)
+        t = phi / math.pi
+        
+        s = s * aspect_ratio
+        
+        s = s % 1.0
+        t = 1 - t
+        
+        texture_coords.append([s, t])
     
-    # Write MeshLab MTL file
-    with open(file_path.replace('.ply', '.mtl'), 'w') as mtl_file:
-        mtl_file.write("newmtl material_0\n")
-        mtl_file.write(f"map_Kd {texture_file}\n")
+    return texture_coords
 
 def sphere_with_texture(full_path_input_ply, full_path_texture, center, full_path_output_ply):
-    vertices, faces = read_ply(full_path_input_ply)
-    cx, cy, cz = center
+    vertices, faces = read(full_path_input_ply)
     
-    # Load texture to get size
-    texture = cv2.imread(full_path_texture)
-    tex_height, tex_width, _ = texture.shape
+    texture_image = cv2.imread(full_path_texture)
+    texture_size = texture_image.shape[1], texture_image.shape[0]
     
-    texture_coords = []
-    for vx, vy, vz in vertices:
-        x = vx - cx
-        y = vy - cy
-        z = vz - cz
-        
-        r = np.sqrt(x**2 + y**2 + z**2)
-        theta = np.arctan2(y, x)
-        phi = np.arccos(z / r)
-        
-        # Calculate UV coordinates
-        u = (theta + np.pi) / (2 * np.pi)
-        v = (1 - phi / np.pi)
-        
-        # Scale by texture dimensions
-        u *= tex_width
-        v *= tex_height
-        
-        texture_coords.append((u, v))
+    texture_coords = calculate_texture_coords(vertices, center, texture_size)
     
-    vertices_with_texture = np.hstack((vertices, np.array(texture_coords)))
-    write_ply(full_path_output_ply, vertices_with_texture, faces, full_path_texture)
+    save(full_path_output_ply, vertices, faces, texture_coords)
 
-# Example usage
-sphere_with_texture(
-    full_path_input_ply='sphere_triangular.ply',
-    full_path_texture='texture1.png',
-    center=(2, 3, 5),
-    full_path_output_ply='sphere-with-texture-1.ply'
-)
+if __name__ == '__main__':
+    sphere_with_texture(
+        full_path_input_ply='sphere_triangular.ply',
+        full_path_texture='texture1.png',
+        center=(2,3,5),
+        full_path_output_ply='sphere-with-texture-1.ply'
+    )

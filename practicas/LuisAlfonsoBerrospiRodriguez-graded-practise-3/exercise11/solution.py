@@ -1,18 +1,87 @@
 import numpy as np
 
-nemo_coin = {}
-nemo_coin_values = {}
+cases_memoization = {}
 
-case_1_base = np.array([True, False, False, False, False, False, False, False])
-case_2_base = np.array([True, True, False, False, False, False, False, False])
-case_4_base = np.array([False, True, False, False, True, True, False, False])
-case_5_base = np.array([True, True, False, False, True, True, False, False])
-case_8_base = np.array([True, False, False, False, True, True, True, False])
+cases_base = {
+    0: np.array([True, False, False, False, False, False, False, False]),
+    1: np.array([True, True, False, False, False, False, False, False]),
+    2: np.array([True, False, False, False, False, True, False, False]),
+    3: np.array([False, True, False, False, True, True, False, False]),
+    4: np.array([True, True, False, False, True, True, False, False]),
+    5: np.array([False, True, True, True, True, False, False, False]),
+    6: np.array([True, False, False, True, False, True, True, False]),
+    7: np.array([True, False, False, False, True, True, True, False]),
+    8: np.array([False, True, True, True, False, False, True, False]),
+    9: np.array([True, False, False, False, False, False, False, True]),
+    10: np.array([True, True, False, False, False, False, False, True]),
+    11: np.array([False, True, False, False, True, False, False, True]),
+    12: np.array([True, False, False, True, True, False, False, True]),
+    13: np.array([True, False, True, True, False, False, False, True])
+}
+cases_dict = {
+    0: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymid, zmin)]],
+    1: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmax, ymin, zmid), (xmin, ymid, zmin)],
+                                                                     [(xmax, ymid, zmin), (xmax, ymin, zmid), (xmin, ymid, zmin)]],
+    2: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymid, zmin)],
+                                                                     [(xmid, ymin, zmax), (xmax, ymin, zmid), (xmax, ymid, zmax)]],
+    3: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmid, ymin, zmin), (xmin, ymin, zmid), (xmax, ymid, zmin)],
+                                                                     [(xmin, ymin, zmid), (xmin, ymid, zmax), (
+                                                                         xmax, ymid, zmin)],
+                                                                     [(xmin, ymid, zmax), (xmax, ymid, zmin), (xmax, ymid, zmax)]],
+    4: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymid, zmin), (xmax, ymid, zmax), (xmax, ymid, zmin)],
+                                                                     [(xmin, ymid, zmin), (xmax, ymid, zmax), (xmin, ymid, zmax)]],
+    5: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmax), (xmin, ymid, zmax)],
+                                                                     [(xmid, ymin, zmin), (xmin, ymin, zmid), (
+                                                                         xmax, ymid, zmin)],
+                                                                     [(xmin, ymin, zmid), (xmin, ymid, zmax), (
+                                                                         xmax, ymid, zmin)],
+                                                                     [(xmin, ymid, zmax), (xmax, ymid, zmin), (xmax, ymid, zmax)]],
+    6: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymid, zmin)],
+                                                                     [(xmid, ymin, zmax), (xmax, ymin, zmid), (
+                                                                         xmax, ymid, zmax)],
+                                                                     [(xmin, ymid, zmax), (xmin, ymax, zmid), (
+                                                                         xmid, ymax, zmax)],
+                                                                     [(xmax, ymid, zmin), (xmid, ymax, zmin), (xmax, ymax, zmid)]],
+    7: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymid, zmin), (xmin, ymax, zmid), (xmid, ymax, zmax)],
+                                                                     [(xmin, ymid, zmin), (xmid, ymin, zmin), (
+                                                                         xmid, ymax, zmax)],
+                                                                     [(xmid, ymin, zmin), (xmid, ymax, zmax), (
+                                                                         xmax, ymid, zmax)],
+                                                                     [(xmax, ymid, zmax), (xmid, ymin, zmin), (xmax, ymin, zmid)]],
+    8: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymid, zmin), (xmid, ymin, zmin), (xmin, ymid, zmax)],
+                                                                     [(xmid, ymin, zmin), (xmin, ymid, zmax), (
+                                                                         xmax, ymax, zmid)],
+                                                                     [(xmin, ymid, zmax), (xmax, ymax, zmid), (
+                                                                         xmid, ymax, zmax)],
+                                                                     [(xmid, ymin, zmin), (xmax, ymin, zmid), (xmax, ymax, zmid)]],
+    9: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymid, zmin)],
+                                                                     [(xmax, ymid, zmax), (xmax, ymax, zmid), (xmid, ymax, zmax)]],
+    10: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmax, ymin, zmid), (xmin, ymid, zmin)],
+                                                                      [(xmax, ymid, zmin), (xmax, ymin, zmid), (
+                                                                          xmin, ymid, zmin)],
+                                                                      [(xmax, ymid, zmax), (xmax, ymax, zmid), (xmid, ymax, zmax)]],
+    11: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmax), (xmin, ymid, zmax)],
+                                                                      [(xmax, ymid, zmax), (xmax, ymax, zmid), (
+                                                                          xmid, ymax, zmax)],
+                                                                      [(xmid, ymin, zmin), (xmax, ymid, zmin), (xmax, ymin, zmid)]],
+    12: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymid, zmin), (xmid, ymin, zmin), (xmin, ymid, zmax)],
+                                                                      [(xmid, ymin, zmin), (xmin, ymid, zmax), (
+                                                                          xmid, ymin, zmax)],
+                                                                      [(xmid, ymax, zmin), (xmax, ymid, zmin), (
+                                                                          xmid, ymax, zmax)],
+                                                                      [(xmax, ymid, zmin), (xmid, ymax, zmax), (xmax, ymid, zmax)]],
+    13: lambda xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax: [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymax, zmid)],
+                                                                      [(xmid, ymin, zmin), (xmin, ymax, zmid), (
+                                                                          xmax, ymid, zmax)],
+                                                                      [(xmax, ymid, zmax), (xmid, ymax, zmax), (
+                                                                          xmin, ymax, zmid)],
+                                                                      [(xmid, ymin, zmin), (xmax, ymid, zmin), (xmax, ymid, zmax)]],
+}
 
 vertices_indices = {}
 
 
-def get_index(vertex):
+def get_idx(vertex):
     if tuple(vertex) in vertices_indices:
         return vertices_indices[tuple(vertex)]
     return -1
@@ -51,26 +120,16 @@ def rotate_point(points_3d, pivot_3d, angle_3d):
     return rotated_points.tolist()
 
 
-def setup_case(case, midpoint, rotation, color='k'):
+def get_case(case, midpoint, rotation, color='k'):
     for i in range(len(case)):
         case[i] = rotate_point(case[i], midpoint, rotation)
     return case, color
 
 
-def check_if_function_changes_sign_in_square(f, xmin, ymin, xmax, ymax):
-    N = 500
-    points = np.random.rand(N, 2)
-    points = points * np.array([xmax - xmin, ymax - ymin]) + np.array([xmin, ymin])
-    first_sign = f(points[0][0], points[0][1]) > 0
-    for point in points:
-        if (f(point[0], point[1]) > 0) != first_sign:
-            return True
-
-
-def check_if_function_changes_sign_in_box(f, xmin, ymin, zmin, xmax, ymax, zmax, level):
-    N = int(2048 / level) + 32
-    points_random_montercarlo = np.random.rand(N, 3)
-    points = points_random_montercarlo * np.array([xmax - xmin, ymax - ymin, zmax - zmin]) + np.array(
+def check_if_function_changes_sign(f, xmin, ymin, zmin, xmax, ymax, zmax, rec):
+    N = int(2000 / rec) + 32
+    montecarlo_points = np.random.rand(N, 3)
+    points = montecarlo_points * np.array([xmax - xmin, ymax - ymin, zmax - zmin]) + np.array(
         [xmin, ymin, zmin])
     first_sign = f(points[0][0], points[0][1], points[0][2]) > 0
     for point in points:
@@ -78,7 +137,7 @@ def check_if_function_changes_sign_in_box(f, xmin, ymin, zmin, xmax, ymax, zmax,
             return True
 
 
-def make_faces_point_outside(faces):
+def fix_faces(faces):
     all_vertices = np.array([vertex for face in faces for vertex in face])
     mesh_center = np.mean(all_vertices, axis=0)
 
@@ -96,8 +155,8 @@ def make_faces_point_outside(faces):
     return faces
 
 
-def to_OFF(faces, filename):
-    faces = make_faces_point_outside(faces)
+def write(faces, path, is_ply=False):
+    faces = fix_faces(faces)
 
     vertices = set()
     for face in faces:
@@ -109,24 +168,34 @@ def to_OFF(faces, filename):
     for i, vertex in enumerate(vertices):
         vertices_indices[vertex] = i
 
-    with open(filename, 'w') as f:
-        f.write('OFF\n')
-        f.write(f'{len(vertices)} {len(faces)} 0\n')
-        # for vertex in vertices:
-        #     f.write(f'{vertex[0]} {vertex[1]} {vertex[2]}\n')
+    if is_ply:
+        with open(path, 'w') as file:
+            file.write("ply\n")
+            file.write("format ascii 1.0\n")
+            file.write(f"element vertex {len(vertices)}\n")
+            file.write("property float x\n")
+            file.write("property float y\n")
+            file.write("property float z\n")
+            file.write(f"element face {len(faces)}\n")
+            file.write("property list uchar int vertex_index\n")
+            file.write("end_header\n")
+            for v in vertices:
+                file.write(f"{' '.join(map(str, v))}\n")
+            for f in faces:
+                file.write(f"{len(f)} {' '.join(
+                    [str(get_idx(vertex)) for vertex in f])}\n")
+    else:
+        with open(path, 'w') as file:
+            file.write("OFF\n")
+            file.write(f"{len(vertices)} {len(faces)} 0\n")
+            for v in vertices:
+                file.write(f"{' '.join(map(str, v))}\n")
+            for f in faces:
+                file.write(f"{len(f)} {' '.join(
+                    [str(get_idx(vertex)) for vertex in f])}\n")
 
-        to_write_vertices = ""
-        for vertex in vertices:
-            to_write_vertices += f'{vertex[0]} {vertex[1]} {vertex[2]}\n'
-        f.write(to_write_vertices)
 
-        to_write_faces = ""
-        for face in faces:
-            to_write_faces += f'{len(face)} {" ".join([str(get_index(vertex)) for vertex in face])}\n'
-        f.write(to_write_faces)
-
-
-def rotate_z_curve(cube, angle_x, angle_y, angle_z):
+def rotate_1d_cube(cube, angle_x, angle_y, angle_z):
     coords = np.array([
         [0, 0, 0],
         [1, 0, 0],
@@ -138,7 +207,8 @@ def rotate_z_curve(cube, angle_x, angle_y, angle_z):
         [1, 1, 1]
     ])
 
-    rotated_coords = rotate_point(coords, (0.5, 0.5, 0.5), (angle_x, angle_y, angle_z))
+    rotated_coords = rotate_point(
+        coords, (0.5, 0.5, 0.5), (angle_x, angle_y, angle_z))
 
     rotated_cube = np.zeros(8, dtype=bool)
     for i in range(8):
@@ -150,49 +220,38 @@ def rotate_z_curve(cube, angle_x, angle_y, angle_z):
     return np.array(rotated_cube)
 
 
-def marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, colors, level=1):
+def utility(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, colors, level=1):
     xmid = (xmin + xmax) / 2
     ymid = (ymin + ymax) / 2
     zmid = (zmin + zmax) / 2
 
-    f000 = f(xmin, ymin, zmin)
-    f100 = f(xmax, ymin, zmin)
-    f010 = f(xmin, ymax, zmin)
-    f110 = f(xmax, ymax, zmin)
-    f001 = f(xmin, ymin, zmax)
-    f101 = f(xmax, ymin, zmax)
-    f011 = f(xmin, ymax, zmax)
-    f111 = f(xmax, ymax, zmax)
-
-    cube = np.array([f000 > 0, f100 > 0, f010 > 0, f110 > 0, f001 > 0, f101 > 0, f011 > 0, f111 > 0])
+    cube = np.array([
+                    f(xmin, ymin, zmin) > 0,
+                    f(xmax, ymin, zmin) > 0,
+                    f(xmin, ymax, zmin) > 0,
+                    f(xmax, ymax, zmin) > 0,
+                    f(xmin, ymin, zmax) > 0,
+                    f(xmax, ymin, zmax) > 0,
+                    f(xmin, ymax, zmax) > 0,
+                    f(xmax, ymax, zmax) > 0
+                    ])
 
     if np.all(cube) or np.all(~cube):
-        if not check_if_function_changes_sign_in_box(f, xmin, ymin, zmin, xmax, ymax, zmax, level):
+        if not check_if_function_changes_sign(f, xmin, ymin, zmin, xmax, ymax, zmax, level):
             return
 
     if ((xmax - xmin) < precision) and (ymax - ymin < precision) and (zmax - zmin < precision):
-        case_1 = [[(xmin, ymin, zmid), (xmid, ymin, zmin), (xmin, ymid, zmin)]]
-        case_2 = [[(xmin, ymin, zmid), (xmax, ymin, zmid), (xmin, ymid, zmin)],
-                  [(xmax, ymid, zmin), (xmax, ymin, zmid), (xmin, ymid, zmin)]]
-        # case_3 = [case_1,
-        #           rotate_point(case_1, (xmid, ymid, zmid), (0, 0, 180))]
-        case_4 = [[(xmid, ymin, zmin), (xmin, ymin, zmid), (xmax, ymid, zmin)],
-                  [(xmin, ymin, zmid), (xmin, ymid, zmax), (xmax, ymid, zmin)],
-                  [(xmin, ymid, zmax), (xmax, ymid, zmin), (xmax, ymid, zmax)]]
-        case_5 = [[(xmin, ymid, zmin), (xmax, ymid, zmax), (xmax, ymid, zmin)],
-                  [(xmin, ymid, zmin), (xmax, ymid, zmax), (xmin, ymid, zmax)]]
-        case_8 = [[(xmin, ymid, zmin), (xmin, ymax, zmid), (xmid, ymax, zmax)],
-                  [(xmin, ymid, zmin), (xmid, ymin, zmin), (xmid, ymax, zmax)],
-                  [(xmid, ymin, zmin), (xmid, ymax, zmax), (xmax, ymid, zmax)],
-                  [(xmax, ymid, zmax), (xmid, ymin, zmin), (xmax, ymin, zmid)]]
 
         local_faces = []
 
-        cases = [case_1, case_2, case_4, case_5, case_8]
+        cases = []
+        for case in cases_dict:
+            cases.append(cases_dict[case](
+                xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax))
 
-        if tuple(cube) in nemo_coin:
-            case, rotation = nemo_coin[tuple(cube)]
-            local_faces = setup_case(cases[case], (xmid, ymid, zmid), rotation)
+        if tuple(cube) in cases_memoization:
+            case, rotation = cases_memoization[tuple(cube)]
+            local_faces = get_case(cases[case], (xmid, ymid, zmid), rotation)
         else:
             found = False
             for i in range(4):
@@ -201,34 +260,15 @@ def marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, co
                         x = i * 90
                         y = j * 90
                         z = k * 90
-
-                        rotated_cube = rotate_z_curve(cube, x, y, z)
-
-                        if (rotated_cube == case_1_base).all() or (rotated_cube == ~case_1_base).all():
-                            local_faces = setup_case(case_1, (xmid, ymid, zmid), (x, y, z))
-                            found = True
-                            nemo_coin[tuple(cube)] = (0, (x, y, z))
-                            break
-                        if (rotated_cube == case_2_base).all() or (rotated_cube == ~case_2_base).all():
-                            local_faces = setup_case(case_2, (xmid, ymid, zmid), (x, y, z))
-                            found = True
-                            nemo_coin[tuple(cube)] = (1, (x, y, z))
-                            break
-                        if (rotated_cube == case_4_base).all() or (rotated_cube == ~case_4_base).all():
-                            local_faces = setup_case(case_4, (xmid, ymid, zmid), (x, y, z))
-                            found = True
-                            nemo_coin[tuple(cube)] = (2, (x, y, z))
-                            break
-                        if (rotated_cube == case_5_base).all() or (rotated_cube == ~case_5_base).all():
-                            local_faces = setup_case(case_5, (xmid, ymid, zmid), (x, y, z))
-                            found = True
-                            nemo_coin[tuple(cube)] = (3, (x, y, z))
-                            break
-                        if (rotated_cube == case_8_base).all() or (rotated_cube == ~case_8_base).all():
-                            local_faces = setup_case(case_8, (xmid, ymid, zmid), (x, y, z))
-                            found = True
-                            nemo_coin[tuple(cube)] = (4, (x, y, z))
-                            break
+                        rotated_cube = rotate_1d_cube(cube, x, y, z)
+                        for case in cases_dict:
+                            if (rotated_cube == cases_base[case]).all() or (rotated_cube == ~cases_base[case]).all():
+                                local_faces = get_case(
+                                    cases_dict[case](xmin, ymin, zmin, xmid, ymid, zmid, xmax, ymax, zmax), (xmid, ymid, zmid), (x, y, z))
+                                found = True
+                                cases_memoization[tuple(cube)] = (
+                                    case, (x, y, z))
+                                break
                     if found:
                         break
                 if found:
@@ -241,38 +281,32 @@ def marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, co
 
         return
 
-    marching_cubes_u(f, xmin, ymin, zmin, xmid, ymid, zmid, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmid, ymin, zmin, xmax, ymid, zmid, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmin, ymid, zmin, xmid, ymax, zmid, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmid, ymid, zmin, xmax, ymax, zmid, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmin, ymin, zmid, xmid, ymid, zmax, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmid, ymin, zmid, xmax, ymid, zmax, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmin, ymid, zmid, xmid, ymax, zmax, precision, faces, colors, level + 1)
-    marching_cubes_u(f, xmid, ymid, zmid, xmax, ymax, zmax, precision, faces, colors, level + 1)
+    utility(f, xmin, ymin, zmin, xmid, ymid, zmid,
+            precision, faces, colors, level + 1)
+    utility(f, xmid, ymin, zmin, xmax, ymid, zmid,
+            precision, faces, colors, level + 1)
+    utility(f, xmin, ymid, zmin, xmid, ymax, zmid,
+            precision, faces, colors, level + 1)
+    utility(f, xmid, ymid, zmin, xmax, ymax, zmid,
+            precision, faces, colors, level + 1)
+    utility(f, xmin, ymin, zmid, xmid, ymid, zmax,
+            precision, faces, colors, level + 1)
+    utility(f, xmid, ymin, zmid, xmax, ymid, zmax,
+            precision, faces, colors, level + 1)
+    utility(f, xmin, ymid, zmid, xmid, ymax, zmax,
+            precision, faces, colors, level + 1)
+    utility(f, xmid, ymid, zmid, xmax, ymax, zmax,
+            precision, faces, colors, level + 1)
 
 
-def marching_cubes(f, output_filename, xmin, ymin, zmin, xmax, ymax, zmax, precision):
+def marching_cubes(json_object_describing_surface, output_filename, xmin, ymin, zmin, xmax, ymax, zmax, precision):
+    f = evaluate_function_3d(json_object_describing_surface)
     faces = []
     colors = []
-    marching_cubes_u(f, xmin, ymin, zmin, xmax, ymax, zmax, precision, faces, colors)
-    to_OFF(faces, output_filename)
-
-
-example_json_3d = {
-    "op": "union",
-    "function": "",
-    "childs": [
-        {
-            "op": "",
-            "function": "(x-2)^2 + (y-3)^2 + (z-3)^2 - 2^2",
-            "childs": []
-        }, {
-            "op": "",
-            "function": "(x+1)^2 + (y-3)^2 + (z-3)^2 - 2^2",
-            "childs": []
-        },
-    ]
-}
+    utility(f, xmin, ymin, zmin, xmax, ymax,
+            zmax, precision, faces, colors)
+    write(faces, output_filename, is_ply=output_filename.endswith(
+        ".ply") or output_filename.endswith(".PLY"))
 
 
 def evaluate_function_3d(node):
@@ -311,5 +345,19 @@ def evaluate_function_3d(node):
 
 
 if __name__ == '__main__':
-    evaluated_function_3d = evaluate_function_3d(example_json_3d)
-    marching_cubes(evaluated_function_3d, "output.OFF", -5, -5, -5, 5, 5, 5, 0.1)
+    example_json_3d = {
+        "op": "diff",
+        "function": "",
+        "childs": [
+            {
+                "op": "",
+                "function": "(x-2)^2 + (y-3)^2 + (z-3)^2 - 2^2",
+                "childs": []
+            }, {
+                "op": "",
+                "function": "(x)^2 + (y-3)^2 + (z-3)^2 - 2^2",
+                "childs": []
+            },
+        ]
+    }
+    marching_cubes(example_json_3d, "output.PLY", -5, -5, -5, 5, 5, 5, 0.05)

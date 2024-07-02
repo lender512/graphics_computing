@@ -59,7 +59,7 @@ def save(path, vertices, faces, is_ply=False):
             for v in vertices:
                 file.write(f"{' '.join(map(str, v))}\n")
             for f in faces:
-                file.write(f"3 {' '.join(map(str, f))}\n")
+                file.write(f"{len(f)} {' '.join(map(str, f))}\n")
     else:
         with open(path, 'w') as file:
             file.write("OFF\n")
@@ -67,7 +67,7 @@ def save(path, vertices, faces, is_ply=False):
             for v in vertices:
                 file.write(f"{' '.join(map(str, v))}\n")
             for f in faces:
-                file.write(f"3 {' '.join(map(str, f))}\n")
+                file.write(f"{len(f)} {' '.join(map(str, f))}\n")
 
 def rotation_matrix(ax, theta):
     ax = np.asarray(ax)

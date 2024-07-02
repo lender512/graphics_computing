@@ -40,7 +40,7 @@ def cube_with_triangular_faces(full_path_output_file):
                 for p in points:
                     file.write(f"{' '.join(map(str, p))}\n")
                 for f in faces:
-                    file.write(f"3 {' '.join(map(str, f))}\n")
+                    file.write(f"{len(f)} {' '.join(map(str, f))}\n")
         else:
             with open(path, 'w') as file:
                 file.write("OFF\n")
@@ -48,7 +48,7 @@ def cube_with_triangular_faces(full_path_output_file):
                 for p in points:
                     file.write(f"{' '.join(map(str, p))}\n")
                 for f in faces:
-                    file.write(f"3 {' '.join(map(str, f))}\n")
+                    file.write(f"{len(f)} {' '.join(map(str, f))}\n")
     
     save(full_path_output_file, (full_path_output_file.endswith('.ply') or full_path_output_file.endswith('.PLY')))
 

@@ -1,55 +1,60 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+cases = {
+    1: np.array([True, True, True, True]),
+    2: np.array([False, False, False, True]),
+    3: np.array([True, False, False, False]),
+    4: np.array([False, True, False, False]),
+    5: np.array([False, False, True, False]),
+    6: np.array([True, False, True, False]),
+    7: np.array([True, True, False, False]),
+    8: np.array([True, False, False, True]),
+    9: np.array([False, True, True, False]),
+}
+
 
 def marching_squares(f, output_filename, xmin, ymin, xmax, ymax, precision):
-    f = evaluate_function_2d(f)
+    f = evaluate(f)
 
-    def marching_squares_u(f, xmin, ymin, xmax, ymax, precision, lines):
+    def utility(f, xmin, ymin, xmax, ymax, precision, lines):
         xmid = (xmin + xmax) / 2
         ymid = (ymin + ymax) / 2
 
-        f00 = f(xmin, ymin)
-        f10 = f(xmax, ymin)
-        f01 = f(xmin, ymax)
-        f11 = f(xmax, ymax)
+        square = np.array([f(xmin, ymax) > 0, f(xmax, ymax)
+                          > 0, f(xmin, ymin) > 0, f(xmax, ymin) > 0])
 
-        square = (f01 > 0, f11 > 0, f00 > 0, f10 > 0)
-
-        if square in [(True, True, True, True)]:
-            if not check_if_function_changes_sign_in_square(f, xmin, ymin, xmax, ymax):
-                return
-        if square in [(False, False, False, False)]:
+        if (square == cases[1]).all() or (~square == cases[1]).all():
             if not check_if_function_changes_sign_in_square(f, xmin, ymin, xmax, ymax):
                 return
         if ((xmax - xmin) < precision) and (ymax - ymin < precision):
-            if square in [(False, False, False, True), (True, True, True, False)]:
+            if (square == cases[2]).all() or (~square == cases[2]).all():
                 lines.append(((xmid, ymin), (xmax, ymid)))
-            if square in [(True, False, False, False), (False, True, True, True)]:
+            if (square == cases[3]).all() or (~square == cases[3]).all():
                 lines.append(((xmin, ymid), (xmid, ymax)))
-            if square in [(False, True, False, False), (True, False, True, True)]:
+            if (square == cases[4]).all() or (~square == cases[4]).all():
                 lines.append(((xmid, ymax), (xmax, ymid)))
-            if square in [(False, False, True, False), (True, True, False, True)]:
+            if (square == cases[5]).all() or (~square == cases[5]).all():
                 lines.append(((xmin, ymid), (xmid, ymin)))
-            if square in [(True, False, True, False), (False, True, False, True)]:
+            if (square == cases[6]).all() or (~square == cases[6]).all():
                 lines.append(((xmid, ymin), (xmid, ymax)))
-            if square in [(True, True, False, False), (False, False, True, True)]:
+            if (square == cases[7]).all() or (~square == cases[7]).all():
                 lines.append(((xmin, ymid), (xmax, ymid)))
-            if square in [(True, False, False, True)]:
+            if (square == cases[8]).all():
                 lines.append(((xmin, ymid), (xmid, ymin)))
                 lines.append(((xmid, ymax), (xmax, ymid)))
-            if square in [(False, True, True, False)]:
+            if (square == cases[9]).all():
                 lines.append(((xmin, ymid), (xmid, ymax)))
                 lines.append(((xmid, ymin), (xmax, ymid)))
             return
 
-        marching_squares_u(f, xmin, ymin, xmid, ymid, precision, lines)
-        marching_squares_u(f, xmin, ymid, xmid, ymax, precision, lines)
-        marching_squares_u(f, xmid, ymin, xmax, ymid, precision, lines)
-        marching_squares_u(f, xmid, ymid, xmax, ymax, precision, lines)
+        utility(f, xmin, ymin, xmid, ymid, precision, lines)
+        utility(f, xmin, ymid, xmid, ymax, precision, lines)
+        utility(f, xmid, ymin, xmax, ymid, precision, lines)
+        utility(f, xmid, ymid, xmax, ymax, precision, lines)
 
     lines = []
-    marching_squares_u(f, xmin, ymin, xmax, ymax, precision, lines)
+    utility(f, xmin, ymin, xmax, ymax, precision, lines)
 
     plt.axis('equal')
     for line in lines:
@@ -69,7 +74,7 @@ def check_if_function_changes_sign_in_square(f, xmin, ymin, xmax, ymax):
             return True
 
 
-def evaluate_function_2d(node):
+def evaluate(node):
     if node["op"] == "":
         function = node["function"]
         function = function.replace("^", "**")
@@ -80,20 +85,20 @@ def evaluate_function_2d(node):
     if node["op"] == "union":
         lambdas = []
         for child in children:
-            lambda_evaluated = evaluate_function_2d(child)
+            lambda_evaluated = evaluate(child)
             lambdas.append(lambda_evaluated)
         return lambda x, y: 1 if all([lambda_evaluated(x, y) == 1 for lambda_evaluated in lambdas]) else -1
     elif node["op"] == "intersection":
         lambdas = []
         for child in children:
-            lambda_evaluated = evaluate_function_2d(child)
+            lambda_evaluated = evaluate(child)
             lambdas.append(lambda_evaluated)
         return lambda x, y: 1 if any([lambda_evaluated(x, y) == 1 for lambda_evaluated in lambdas]) else -1
     elif node["op"] == "diff":
-        lambda_result_first = evaluate_function_2d(children[0])
+        lambda_result_first = evaluate(children[0])
         lambdas_other = []
         for child in children[1:]:
-            lambda_evaluated = evaluate_function_2d(child)
+            lambda_evaluated = evaluate(child)
             lambdas_other.append(lambda_evaluated)
 
         return lambda x, y: 1 if lambda_result_first(x, y) == 1 and all(

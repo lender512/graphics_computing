@@ -1,41 +1,62 @@
 import numpy as np
 import cv2
 
-def load_off_mesh(file_path):
+def read(path, is_ply=False):
     vertices = []
     faces = []
-
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-        vertex_count, face_count, _ = map(int, lines[1].strip().split())
-        
-        for i in range(2, 2 + vertex_count):
-            vertex = list(map(float, lines[i].strip().split()))
-            vertices.append(vertex)
-        
-        for i in range(2 + vertex_count, 2 + vertex_count + face_count):
-            face = list(map(int, lines[i].strip().split()))[1:]  # Skip the first number (face size)
-            faces.append(face)
-    
+    if is_ply:
+        with open(path, 'r') as file:
+            lines = file.readlines()
+            header_ended = False
+            vertex_count = 0
+            face_count = 0
+            reading_vertices = False
+            reading_faces = False
+            for line in lines:
+                if line.startswith("end_header"):
+                    header_ended = True
+                    reading_vertices = True
+                    continue
+                if not header_ended:
+                    if line.startswith("element vertex"):
+                        vertex_count = int(line.split()[-1])
+                    if line.startswith("element face"):
+                        face_count = int(line.split()[-1])
+                else:
+                    if reading_vertices:
+                        if vertex_count > 0:
+                            vertices.append(list(map(float, line.strip().split())))
+                            vertex_count -= 1
+                            if vertex_count == 0:
+                                reading_vertices = False
+                                reading_faces = True
+                    elif reading_faces:
+                        if face_count > 0:
+                            faces.append(list(map(int, line.strip().split()[1:])))
+                            face_count -= 1
+    else:
+        with open(path, 'r') as file:
+            lines = file.readlines()
+            assert lines[0].strip() == "OFF"
+            n_vertices, n_faces, _ = map(int, lines[1].strip().split())
+            for i in range(2, 2 + n_vertices):
+                vertices.append(list(map(float, lines[i].strip().split())))
+            for i in range(2 + n_vertices, 2 + n_vertices + n_faces):
+                faces.append(list(map(int, lines[i].strip().split()[1:])))
     return vertices, faces
 
-def calculate_normal(vertices, face):
-    v0 = np.array(vertices[face[0]])
-    v1 = np.array(vertices[face[1]])
-    v2 = np.array(vertices[face[2]])
+def normal(vertices, face):
+    v0, v1, v2 = (np.array(vertices[i]) for i in face[:3])
     return np.cross(v1 - v0, v2 - v0)
 
-PLANE = np.array([0, 0, 1])
-CAMERA = np.array([0, 0, 0])
 
 def project_to_plane(vertices):
-    direction_to_camera = CAMERA - vertices
-    projection_along_normal = (np.dot(direction_to_camera, PLANE) / np.linalg.norm(PLANE))[:, np.newaxis] * PLANE
-    projected_vertices = vertices - projection_along_normal
-    
-    return projected_vertices
+    plane = np.array([0, 0, 1])
+    direction = np.array([0, 0, 0]) - vertices
+    normal_projection = (np.dot(direction, plane) / np.linalg.norm(plane))[:, np.newaxis] * plane
+    return vertices - normal_projection
 
-def painter_algorithm_simple_cosine_illuminatio(
+def painter_algorithm_simple_cosine_illumination(
     full_path_input_mesh,
     full_path_output_image,
     min_x_coordinate_in_projection_plane,
@@ -45,36 +66,25 @@ def painter_algorithm_simple_cosine_illuminatio(
     width_in_pixels,
     height_in_pixels
 ):
-    # Load mesh
-    vertices, faces = load_off_mesh(full_path_input_mesh)
+    vertices, faces = read(full_path_input_mesh, is_ply=full_path_input_mesh.endswith(".ply") or full_path_input_mesh.endswith(".PLY"))
     
-    # Calculate triangle normals
-    normals = [calculate_normal(vertices, face) for face in faces]
+    normals = [normal(vertices, face) for face in faces]
 
-    # Calculate maximum distance to origin for sorting
-    def calculate_max_distance(face):
-        return max(np.linalg.norm(vertices[face[0]]), np.linalg.norm(vertices[face[1]]), np.linalg.norm(vertices[face[2]]))
+    def max_distance(face):
+        return max(np.linalg.norm(vertices[vertex]) for vertex in face)
 
-    # Sort faces by maximum distance
-    sorted_faces = sorted(faces, key=calculate_max_distance, reverse=True)
+    sorted_faces = sorted(faces, key=max_distance, reverse=True)
 
-    # Initialize image as white canvas
     image = np.zeros((height_in_pixels, width_in_pixels, 3), np.uint8) * 255
 
-    # Project and draw triangles
     for face in sorted_faces:
-        v0 = vertices[face[0]]
-        v1 = vertices[face[1]]
-        v2 = vertices[face[2]]
-
-        # Calculate illumination (cosine of angle with respect to (0, 0, -1))
+        v0, v1, v2 = (vertices[vertex] for vertex in face[:3])
+        
         normal = normals[faces.index(face)]
         cos_alpha = abs(np.dot(normal, np.array([0, 0, -1])) / np.linalg.norm(normal))
 
-        # Project vertices to 2D plane
-        projected_vertices = project_to_plane([v0, v1, v2])
+        projected_vertices = project_to_plane(np.array([v0, v1, v2]))
 
-        # Scale to image coordinates
         scaled_vertices = [
             (
                 int((x - min_x_coordinate_in_projection_plane) / (max_x_coordinate_in_projection_plane - min_x_coordinate_in_projection_plane) * width_in_pixels),
@@ -83,11 +93,8 @@ def painter_algorithm_simple_cosine_illuminatio(
             for x, y in projected_vertices[:, :2]
         ]
 
-        # Convert to OpenCV points format
-        pts = np.array(scaled_vertices, np.int32)
-        pts = pts.reshape((-1, 1, 2))
+        pts = np.array(scaled_vertices, np.int32).reshape((-1, 1, 2))
 
-        # Draw filled triangle with adjusted color
         color = tuple(int(255 * cos_alpha) for _ in range(3))
         cv2.fillPoly(image, [pts], color)
 
@@ -96,13 +103,13 @@ def painter_algorithm_simple_cosine_illuminatio(
 
 
 
-painter_algorithm_simple_cosine_illuminatio(
+painter_algorithm_simple_cosine_illumination(
     full_path_input_mesh="loop-from-cube-3-iterations.off",
     full_path_output_image="photo-of-sphere.png",
-    min_x_coordinate_in_projection_plane=-1.0,
-    min_y_coordinate_in_projection_plane=-1.0,
-    max_x_coordinate_in_projection_plane=1.0,
-    max_y_coordinate_in_projection_plane=1.0,
-    width_in_pixels=640,
+    min_x_coordinate_in_projection_plane=-2.0,
+    min_y_coordinate_in_projection_plane=-2.0,
+    max_x_coordinate_in_projection_plane=2.0,
+    max_y_coordinate_in_projection_plane=2.0,
+    width_in_pixels=480,
     height_in_pixels=480
 )

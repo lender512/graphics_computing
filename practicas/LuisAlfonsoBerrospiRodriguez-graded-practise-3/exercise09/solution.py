@@ -144,7 +144,7 @@ def loop(full_path_input_mesh, number_of_iterations, full_path_output_mesh):
 
 if __name__ == '__main__':
     loop(
-        full_path_input_mesh='icosahedron.off',
+        full_path_input_mesh='cube.off',
         number_of_iterations=5,
         full_path_output_mesh='loop-from-cube-3-iterations.off'
     )

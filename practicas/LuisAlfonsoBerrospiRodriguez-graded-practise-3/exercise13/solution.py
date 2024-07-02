@@ -1,146 +1,117 @@
 import numpy as np
 import cv2
 
-def load_off_mesh(file_path):
+def read_ply_with_texture(path):
     vertices = []
     faces = []
-    texcoords = []  # List to store UV coordinates
-
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-        vertex_count, face_count, _ = map(int, lines[1].strip().split())
-        
-        for i in range(2, 2 + vertex_count):
-            data = list(map(float, lines[i].strip().split()))
-            vertices.append(data[:3])  # Vertex coordinates
-            texcoords.append(data[3:])  # UV coordinates
-        
-        for i in range(2 + vertex_count, 2 + vertex_count + face_count):
-            face = list(map(int, lines[i].strip().split()))[1:]  # Skip the first number (face size)
-            faces.append(face)
+    texture_coords = []
+    with open(path, 'r') as file:
+        lines = file.readlines()
+        header_ended = False
+        vertex_count = 0
+        face_count = 0
+        reading_vertices = False
+        reading_faces = False
+        for line in lines:
+            if line.startswith("end_header"):
+                header_ended = True
+                reading_vertices = True
+                continue
+            if not header_ended:
+                if line.startswith("element vertex"):
+                    vertex_count = int(line.split()[-1])
+                if line.startswith("element face"):
+                    face_count = int(line.split()[-1])
+            else:
+                if reading_vertices:
+                    if vertex_count > 0:
+                        parts = list(map(float, line.strip().split()))
+                        vertices.append(parts[:3])
+                        texture_coords.append(parts[3:5])
+                        vertex_count -= 1
+                        if vertex_count == 0:
+                            reading_vertices = False
+                            reading_faces = True
+                elif reading_faces:
+                    if face_count > 0:
+                        faces.append(list(map(int, line.strip().split()[1:])))
+                        face_count -= 1
     
-    return vertices, faces, texcoords
+    return np.array(vertices), np.array(faces), np.array(texture_coords)
 
-def calculate_normal(vertices, face):
-    v0 = np.array(vertices[face[0]])
-    v1 = np.array(vertices[face[1]])
-    v2 = np.array(vertices[face[2]])
-    return np.cross(v1 - v0, v2 - v0)
+def project_vertex(vertex, min_x, min_y, max_x, max_y, width, height):
+    x, y, z = vertex
+    if z == 0:
+        z = 0.0001
+    px = x / z
+    py = y / z
+    screen_x = int((px - min_x) / (max_x - min_x) * width)
+    screen_y = int((py - min_y) / (max_y - min_y) * height)
+    return screen_x, screen_y
 
-PLANE = np.array([0, 0, 1])
-CAMERA = np.array([0, 0, 0])
+def barycentric_coordinates(p, a, b, c):
+    v0 = b - a
+    v1 = c - a
+    v2 = p - a
+    d00 = np.dot(v0, v0)
+    d01 = np.dot(v0, v1)
+    d11 = np.dot(v1, v1)
+    d20 = np.dot(v2, v0)
+    d21 = np.dot(v2, v1)
+    denom = d00 * d11 - d01 * d01
+    if abs(denom) < 1e-6:
+        return -1, -1, -1
+    v = (d11 * d20 - d01 * d21) / denom
+    w = (d00 * d21 - d01 * d20) / denom
+    u = 1.0 - v - w
+    return u, v, w
 
-def project_to_plane(vertices):
-    direction_to_camera = CAMERA - vertices
-    projection_along_normal = (np.dot(direction_to_camera, PLANE) / np.linalg.norm(PLANE))[:, np.newaxis] * PLANE
-    projected_vertices = vertices - projection_along_normal
+def painter_algorithm_textures(full_path_input_mesh, full_path_input_texture, full_path_output_image,
+                               min_x, min_y, max_x, max_y, width, height):
+    vertices, faces, texture_coords = read_ply_with_texture(full_path_input_mesh)
+    texture = cv2.imread(full_path_input_texture)
     
-    return projected_vertices
-
-def painter_algorithm_simple_cosine_illumination(
-    full_path_input_mesh,
-    full_path_texture_image,
-    full_path_output_image,
-    min_x_coordinate_in_projection_plane,
-    min_y_coordinate_in_projection_plane,
-    max_x_coordinate_in_projection_plane,
-    max_y_coordinate_in_projection_plane,
-    width_in_pixels,
-    height_in_pixels
-):
-    # Load mesh and UV coordinates
-    vertices, faces, texcoords = load_off_mesh(full_path_input_mesh)
-    #rotate the mesh
+    image = np.zeros((height, width, 3), dtype=np.uint8)
     
-    # Load texture image
-    texture_image = cv2.imread(full_path_texture_image)
+    sorted_faces = sorted(faces, key=lambda f: max(np.linalg.norm(vertices[v]) for v in f), reverse=True)
     
-    # Calculate triangle normals
-    normals = [calculate_normal(vertices, face) for face in faces]
-
-    # Calculate maximum distance to origin for sorting
-    def calculate_max_distance(face):
-        return max(np.linalg.norm(vertices[face[0]]), np.linalg.norm(vertices[face[1]]), np.linalg.norm(vertices[face[2]]))
-
-    # Sort faces by maximum distance
-    sorted_faces = sorted(faces, key=calculate_max_distance, reverse=True)
-
-    # Initialize image as white canvas
-    image = np.ones((height_in_pixels, width_in_pixels, 3), np.uint8) * 255
-
-    # Project and draw textured triangles
     for face in sorted_faces:
-        v0 = vertices[face[0]]
-        v1 = vertices[face[1]]
-        v2 = vertices[face[2]]
-
-        # Get UV coordinates for the vertices
-        uv0 = texcoords[face[0]]
-        uv1 = texcoords[face[1]]
-        uv2 = texcoords[face[2]]
-
-        # Calculate illumination (cosine of angle with respect to (0, 0, -1))
-        normal = normals[faces.index(face)]
-        cos_alpha = abs(np.dot(normal, np.array([0, 0, -1])) / np.linalg.norm(normal))
-
-        # Project vertices to 2D plane
-        projected_vertices = project_to_plane(np.array([v0, v1, v2]))
-
-        # Scale to image coordinates
-        scaled_vertices = [
-            (
-                int((x - min_x_coordinate_in_projection_plane) / (max_x_coordinate_in_projection_plane - min_x_coordinate_in_projection_plane) * width_in_pixels),
-                int((y - min_y_coordinate_in_projection_plane) / (max_y_coordinate_in_projection_plane - min_y_coordinate_in_projection_plane) * height_in_pixels)
-            )
-            for x, y in projected_vertices[:, :2]
-        ]
-
-        # Convert to OpenCV points format
-        pts = np.array(scaled_vertices, np.int32)
-        pts = pts.reshape((-1, 1, 2))
-
-        # Define corresponding UV coordinates
-        uvs = np.array([uv0, uv1, uv2], np.float32)
-
-        # Get bounding box of the triangle
-        rect = cv2.boundingRect(pts)
-
-        # Get the ROI in the texture image
-        x, y, w, h = rect
-        tex_roi = texture_image[y:y+h, x:x+w]
-
-        # Create mask for the triangle
-        mask = np.zeros((h, w), np.uint8)
-        tri_pts = np.array([[scaled_vertices[i][0] - x, scaled_vertices[i][1] - y] for i in range(3)], np.int32)
-        cv2.fillConvexPoly(mask, tri_pts, 255)
-
-        # Warp the texture to the triangle
-        src_tri = np.array(uvs, np.float32)
-        dst_tri = np.array(tri_pts, np.float32)
-        warp_mat = cv2.getAffineTransform(src_tri, dst_tri)
-        warped_texture = cv2.warpAffine(tex_roi, warp_mat, (w, h))
-
-        # Apply the mask to the warped texture
-        warped_texture = cv2.bitwise_and(warped_texture, warped_texture, mask=mask)
-
-        # Overlay the warped texture onto the image
-        image_roi = image[y:y+h, x:x+w]
-        image_bg = cv2.bitwise_and(image_roi, image_roi, mask=cv2.bitwise_not(mask))
-        image_roi = cv2.add(image_bg, warped_texture)
-        image[y:y+h, x:x+w] = image_roi
-
+        v1, v2, v3 = vertices[face]
+        t1, t2, t3 = texture_coords[face]
+        
+        p1 = project_vertex(v1, min_x, min_y, max_x, max_y, width, height)
+        p2 = project_vertex(v2, min_x, min_y, max_x, max_y, width, height)
+        p3 = project_vertex(v3, min_x, min_y, max_x, max_y, width, height)
+        
+        min_x_bb = max(0, min(p1[0], p2[0], p3[0]))
+        max_x_bb = min(width - 1, max(p1[0], p2[0], p3[0]))
+        min_y_bb = max(0, min(p1[1], p2[1], p3[1]))
+        max_y_bb = min(height - 1, max(p1[1], p2[1], p3[1]))
+        
+        for y in range(min_y_bb, max_y_bb + 1):
+            for x in range(min_x_bb, max_x_bb + 1):
+                u, v, w = barycentric_coordinates(np.array([x, y]), np.array(p1), np.array(p2), np.array(p3))
+                
+                if u >= 0 and v >= 0 and w >= 0:
+                    tx = u * t1[0] + v * t2[0] + w * t3[0]
+                    ty = u * t1[1] + v * t2[1] + w * t3[1]
+                    
+                    tx = int(tx * texture.shape[1]) % texture.shape[1]
+                    ty = int(ty * texture.shape[0]) % texture.shape[0]
+                    color = texture[ty, tx]
+                    
+                    image[y, x] = color
+    
     cv2.imwrite(full_path_output_image, image)
 
-
-# Example usage:
-painter_algorithm_simple_cosine_illumination(
-    full_path_input_mesh="icosahedron.off",
-    full_path_texture_image="texture1.png",
-    full_path_output_image="photo-of-sphere-texture.png",
-    min_x_coordinate_in_projection_plane=-1.0,
-    min_y_coordinate_in_projection_plane=-1.0,
-    max_x_coordinate_in_projection_plane=1.0,
-    max_y_coordinate_in_projection_plane=1.0,
-    width_in_pixels=640,
-    height_in_pixels=480
+painter_algorithm_textures(
+    full_path_input_mesh='sphere-with-texture-1.ply',
+    full_path_input_texture='texture1.png',
+    full_path_output_image='photo-of-sphere.png',
+    min_x=-1.0,
+    min_y=-1.0,
+    max_x=1.0,
+    max_y=1.0,
+    width=640,
+    height=480
 )
