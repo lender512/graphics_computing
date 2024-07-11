@@ -21,6 +21,10 @@ def read(path):
                 uv.append(list(map(float, line[3:])))
             else:
                 vertices[i] = list(map(float, line))
+        
+        for i in range(n_faces):
+            line = file.readline().strip().split()
+            faces[i] = list(map(int, line[1:]))
 
     return vertices, faces
 
@@ -46,7 +50,30 @@ def detect_qr_code(image):
     raise ValueError("No QR code detected in the image")
 
 
+def read(path):
+    with open(path, 'r') as file:
+        header = file.readline().strip()
+        assert header in {"OFF", "COFF", "NOFF", "STOFF"}, "Invalid file format"
+        
+        n_vertices, n_faces, _ = map(int, file.readline().strip().split())
 
+        vertices = [None] * n_vertices
+        faces = [None] * n_faces
+        uv = [] if header == "STOFF" else None
+        
+        for i in range(n_vertices):
+            line = file.readline().strip().split()
+            if header == "STOFF":
+                vertices[i] = list(map(float, line[:3]))
+                uv.append(list(map(float, line[3:])))
+            else:
+                vertices[i] = list(map(float, line))
+        
+        for i in range(n_faces):
+            line = file.readline().strip().split()
+            faces[i] = list(map(int, line[1:]))
+
+    return vertices, faces
 
 def draw_mesh_on_top_of_marker(full_path_input_image, full_path_mesh, full_path_output_image):
     image = cv2.imread(full_path_input_image)
@@ -66,7 +93,6 @@ def draw_mesh_on_top_of_marker(full_path_input_image, full_path_mesh, full_path_
     axis = np.float32([[1,0,0], [0,1,0], [0,0,-1]]).reshape(-1,3)
     imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, np.eye(3), np.zeros(5))
     imgpts = imgpts.astype(np.int32)
-    print(imgpts[0])
     for i in range(2):
         cv2.line(image, tuple(imgpts[0].ravel()), tuple(imgpts[i].ravel()), (0,0,255), 3)
     
@@ -122,30 +148,66 @@ def draw_mesh_on_top_of_marker(full_path_input_image, full_path_mesh, full_path_
     # draw cube on top of the marker
     
     # Define the 3D coordinates of the cube vertices in the real world
-    cube_3d_points = np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 1, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-        [1, 0, 1],
-        [1, 1, 1],
-        [0, 1, 1]
-    ], dtype=np.float32)
+    vertices, faces = read(full_path_mesh)
+    vertices = np.array(vertices)
     
-    # Define the 3D coordinates of the cube edges
-    cube_edges = [
-        (0, 1), (1, 2), (2, 3), (3, 0),
-        (4, 5), (5, 6), (6, 7), (7, 4),
-        (0, 4), (1, 5), (2, 6), (3, 7)
-    ]
+    # normalize the vertices from 0 to 1
+    vertices = vertices - vertices.min(axis=0)
+    vertices = vertices / vertices.max()
+    
+    #rotate the vertices
+    angles = np.array([90, 0, 0])
+    angles = np.radians(angles)
+    
+    center = vertices.mean(axis=0)
+    vertices = vertices - center
+    
+    rotation_matrix = np.array([
+        [np.cos(angles[1])*np.cos(angles[2]), np.cos(angles[2])*np.sin(angles[0])*np.sin(angles[1]) - np.cos(angles[0])*np.sin(angles[2]), np.cos(angles[0])*np.cos(angles[2])*np.sin(angles[1]) + np.sin(angles[0])*np.sin(angles[2])],
+        [np.cos(angles[1])*np.sin(angles[2]), np.cos(angles[0])*np.cos(angles[2]) + np.sin(angles[0])*np.sin(angles[1])*np.sin(angles[2]), -np.cos(angles[2])*np.sin(angles[0]) + np.cos(angles[0])*np.sin(angles[1])*np.sin(angles[2])],
+        [-np.sin(angles[1]), np.cos(angles[1])*np.sin(angles[0]), np.cos(angles[0])*np.cos(angles[1])]
+    ])
+    
+    vertices = np.dot(vertices, rotation_matrix.T)
+    vertices = vertices + center
+    
+    
+    
+    
     
     # Project the cube vertices to 2D image points
-    projected_points, _ = cv2.projectPoints(cube_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+    projected_points, _ = cv2.projectPoints(vertices, rvec, tvec, camera_matrix, dist_coeffs)
     
     # Draw the cube edges on the image
-    for edge in cube_edges:
-        cv2.line(image, tuple(projected_points[edge[0]][0].astype(int)), tuple(projected_points[edge[1]][0].astype(int)), (255, 0, 0), 2)
+    #sort z order of faces
+    faces = np.array(faces)
+    z_order = vertices[faces].mean(axis=1)[:, 2]
+    order = np.argsort(z_order)
+    faces = faces[order]
+    
+    
+    
+    for face in faces:
+        vertices_2d = projected_points[face]
+        vertices_3d = vertices[face]
+        #sort clockwise
+        center = vertices_3d.mean(axis=0)
+        vertices_3d = vertices_3d - center
+        angles = np.arctan2(vertices_3d[:, 1], vertices_3d[:, 0])
+        order = np.argsort(angles)
+        vertices_3d = vertices_3d[order]
+        vertices_2d = vertices_2d[order]
+        
+        #applay cosine shading
+        normal = np.cross(vertices_3d[1] - vertices_3d[0], vertices_3d[2] - vertices_3d[0])
+        normal = normal / np.linalg.norm(normal)
+        light = np.array([0, 0, 1])
+        light = light / np.linalg.norm(light)
+        color = np.dot(normal, light)
+        color = np.clip(color, 0, 1)
+        color = (color*255, color*255, color*255)
+           
+        cv2.polylines(image, [vertices_2d.astype(int)], isClosed=True, color=color, thickness=2)      
         
         
 
@@ -156,6 +218,6 @@ def draw_mesh_on_top_of_marker(full_path_input_image, full_path_mesh, full_path_
 if __name__ == "__main__":
     draw_mesh_on_top_of_marker(
         full_path_input_image="photo.jpg",
-        full_path_mesh="meshes-for-exercises-1-2-3/cubo.off",
+        full_path_mesh="meshes-for-exercises-1-2-3/cow_mc-hr.off",
         full_path_output_image="output.jpg"
     )
